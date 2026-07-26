@@ -14,7 +14,7 @@ export default async function TeamPage() {
   // RLS "profiles_select_same_tenant" policy'si sayesinde sadece kendi
   // tenant'ındaki üyeler dönüyor — başka tenant'ın kullanıcıları görünmez.
   const { data: members } = await supabase
-    .from("profiles")
+    .from("vibe_profiles")
     .select("id, full_name, role, created_at")
     .order("created_at", { ascending: true });
 

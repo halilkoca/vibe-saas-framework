@@ -1,17 +1,11 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAllLeads } from "@/lib/data/leads";
 import { NewLeadForm } from "./new-lead-form";
 import { LeadRow } from "./lead-row";
 
 export const dynamic = "force-dynamic";
 
 export default async function LeadsPage() {
-  const supabase = await createClient();
-
-  // RLS otomatik filtreliyor — sadece bu kullanıcının tenant'ına ait satırlar döner.
-  const { data: leads } = await supabase
-    .from("vibe_leads")
-    .select("id, full_name, email, phone, source, status, created_at")
-    .order("created_at", { ascending: false });
+  const leads = await getAllLeads();
 
   return (
     <div className="p-8">

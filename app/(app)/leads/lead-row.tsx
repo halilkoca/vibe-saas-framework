@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { updateLeadStatus, deleteLead } from "./actions";
+import { updateLeadStatusAction, deleteLeadAction } from "./actions";
 
 type Lead = {
   id: string;
@@ -24,12 +24,12 @@ export function LeadRow({ lead }: { lead: Lead }) {
 
   function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const status = e.target.value;
-    startTransition(() => updateLeadStatus(lead.id, status));
+    startTransition(() => updateLeadStatusAction(lead.id, status));
   }
 
   function handleDelete() {
     if (!confirm(`"${lead.full_name}" silinsin mi? Bu işlem geri alınamaz.`)) return;
-    startTransition(() => deleteLead(lead.id));
+    startTransition(() => deleteLeadAction(lead.id));
   }
 
   return (

@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { rateLimit } from "@/lib/rate-limit";
 import { headers } from "next/headers";
+import { getClientIp } from "@/lib/get-client-ip";
+import { sanitizeText, isValidEmail, isValidPassword, LIMITS } from "@/lib/validation";
 
 export type SignupState = { error: string | null; success?: string | null };
 
@@ -11,9 +13,12 @@ export async function signup(
   _prevState: SignupState,
   formData: FormData
 ): Promise<SignupState> {
-  const fullName = String(formData.get("full_name") ?? "").trim();
-  const companyName = String(formData.get("company_name") ?? "").trim();
-  const email = String(formData.get("email") ?? "").trim();
+  const headerList = await headers();
+  const ip = getClientIp(headerList);
+
+  const fullName = sanitizeText(String(formData.get("full_name") ?? ""), LIMITS.fullName.max);
+  const companyName = sanitizeText(String(formData.get("company_name") ?? ""), LIMITS.companyName.max);
+  const email = sanitizeText(String(formData.get("email") ?? ""), LIMITS.email.max);
   const password = String(formData.get("password") ?? "");
   const turnstileToken = String(formData.get("cf-turnstile-response") ?? "");
 
@@ -21,16 +26,17 @@ export async function signup(
     return { error: "Tüm alanları doldurman gerekiyor." };
   }
 
-  if (password.length < 8) {
-    return { error: "Şifre en az 8 karakter olmalı." };
+  if (!isValidEmail(email)) {
+    return { error: "Geçerli bir e-posta adresi girin." };
   }
 
-  const headerList = await headers();
-  const ip = headerList.get("x-forwarded-for") ?? "unknown";
+  if (!isValidPassword(password)) {
+    return { error: "Şifre en az 8, en fazla 72 karakter olmalı." };
+  }
 
-  // Signup spam'ini engellemek için IP başına daha sıkı limit.
-  const { success } = await rateLimit(ip, "signup", 3, 60_000);
-  if (!success) {
+  // Signup spam'ini engelle
+  const { success: rateOk } = await rateLimit(ip, "signup", 3, 60_000);
+  if (!rateOk) {
     return { error: "Çok fazla kayıt denemesi yapıldı. Bir dakika sonra tekrar deneyin." };
   }
 
@@ -41,9 +47,6 @@ export async function signup(
 
   const supabase = await createClient();
 
-  // ÖNEMLİ: tenant_id burada YOK. Kullanıcı meta verisi sadece isim/şirket adı taşır.
-  // Gerçek tenant + profile satırı 0001_core.sql'deki handle_new_user() trigger'ında
-  // DB tarafında, security definer ile oluşturulur — client asla tenant_id belirlemez.
   const { error } = await supabase.auth.signUp({
     email,
     password,

@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState, useRef, useEffect } from "react";
-import { createDeal, type CreateDealState } from "./actions";
+import { createDealAction, type CreateDealState } from "./actions";
 
 const initialState: CreateDealState = { error: null, success: false };
 
 export function NewDealForm() {
-  const [state, formAction, pending] = useActionState(createDeal, initialState);
+  const [state, formAction, pending] = useActionState(createDealAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

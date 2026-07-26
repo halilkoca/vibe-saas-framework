@@ -1,7 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
-import { updateDealStage } from "./actions";
+import { updateDealStageAction } from "./actions";
 
 type Deal = {
   id: string;
@@ -20,7 +20,7 @@ export function DealCard({
   const [isPending, startTransition] = useTransition();
 
   function handleMove(e: React.ChangeEvent<HTMLSelectElement>) {
-    startTransition(() => updateDealStage(deal.id, e.target.value));
+    startTransition(() => updateDealStageAction(deal.id, e.target.value));
   }
 
   return (

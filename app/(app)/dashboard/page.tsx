@@ -1,25 +1,14 @@
-import { createClient } from "@/lib/supabase/server";
+import { getLeadsCount, getRecentLeads } from "@/lib/data/leads";
+import { getOpenDealCount } from "@/lib/data/deals";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const supabase = await createClient();
-
-  // RLS zaten tenant_id filtresini otomatik uyguluyor — burada elle
-  // "where tenant_id = ..." yazmıyoruz, yazmaya da gerek yok.
-  const [{ count: leadCount }, { count: openDealCount }, { data: recentLeads }] =
-    await Promise.all([
-      supabase.from("vibe_leads").select("*", { count: "exact", head: true }),
-      supabase
-        .from("vibe_deals")
-        .select("*", { count: "exact", head: true })
-        .not("stage", "in", "(won,lost)"),
-      supabase
-        .from("vibe_leads")
-        .select("id, full_name, status, created_at")
-        .order("created_at", { ascending: false })
-        .limit(5),
-    ]);
+  const [leadCount, openDealCount, recentLeads] = await Promise.all([
+    getLeadsCount(),
+    getOpenDealCount(),
+    getRecentLeads(5),
+  ]);
 
   return (
     <div className="p-8">

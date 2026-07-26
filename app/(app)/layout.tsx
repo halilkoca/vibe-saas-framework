@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getProfile } from "@/lib/data/profiles";
 import { isModuleEnabled } from "@/lib/modules.config";
 import { SignOutButton } from "./sign-out-button";
 import { NavLink } from "./nav-link";
@@ -18,18 +19,14 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  const { data: profile } = await supabase
-    .from("vibe_profiles")
-    .select("full_name, role, vibe_tenants(name)")
-    .eq("id", user.id)
-    .single();
+  const profile = await getProfile(user.id);
 
   return (
     <div className="min-h-screen flex">
       <aside className="w-60 shrink-0 border-r border-border bg-white flex flex-col">
         <div className="px-5 py-5 border-b border-border">
           <span className="font-semibold text-sm">
-            {(profile as any)?.vibe_tenants?.name ?? "VibeSaaS"}
+            {profile?.tenant_name ?? "VibeSaaS"}
           </span>
         </div>
 

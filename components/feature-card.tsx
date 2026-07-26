@@ -7,7 +7,11 @@ type FeatureCardProps = {
 export function FeatureCard({ icon, title, description }: FeatureCardProps) {
   return (
     <div className="bg-white border border-border rounded-xl p-6 hover:shadow-sm transition">
-      <div className="text-2xl mb-3" aria-hidden="true">
+      <div
+        className="text-2xl mb-3"
+        role="img"
+        aria-label={`${title} icon`}
+      >
         {icon}
       </div>
       <h3 className="text-sm font-semibold mb-2">{title}</h3>

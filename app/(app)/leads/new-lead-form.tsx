@@ -1,12 +1,12 @@
 "use client";
 
 import { useActionState, useRef, useEffect } from "react";
-import { createLead, type CreateLeadState } from "./actions";
+import { createLeadAction, type CreateLeadState } from "./actions";
 
 const initialState: CreateLeadState = { error: null, success: false };
 
 export function NewLeadForm() {
-  const [state, formAction, pending] = useActionState(createLead, initialState);
+  const [state, formAction, pending] = useActionState(createLeadAction, initialState);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {

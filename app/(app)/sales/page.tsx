@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getAllDeals } from "@/lib/data/deals";
 import { NewDealForm } from "./new-deal-form";
 import { DealCard } from "./deal-card";
 
@@ -13,12 +13,7 @@ const STAGES = [
 ] as const;
 
 export default async function SalesPage() {
-  const supabase = await createClient();
-
-  const { data: deals } = await supabase
-    .from("vibe_deals")
-    .select("id, title, amount, stage, close_date")
-    .order("created_at", { ascending: false });
+  const deals = await getAllDeals();
 
   const dealsByStage = STAGES.map((stage) => ({
     ...stage,
