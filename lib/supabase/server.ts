@@ -40,7 +40,7 @@ export async function createClient() {
 // (ör. Stripe webhook'unda subscription güncelleme). Asla kullanıcı
 // isteğine bağlı normal CRUD'da kullanılmaz — kullanılırsa RLS bypass olur.
 export function createServiceRoleClient() {
-  const { createClient: createSupabaseClient } = require("@supabase/supabase-js");
+  const { createClient: createSupabaseClient } = require("@supabase/supabase-js") as typeof import("@supabase/supabase-js");
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
