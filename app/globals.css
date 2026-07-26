@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #14171F;
+  --color-paper: #FAFAF9;
+  --color-accent: #2563EB;
+  --color-border: #E4E4E1;
+  --color-muted: #6B7280;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background: #FAFAF9;
+  color: #14171F;
+}
+
+* {
+  border-color: #E4E4E1;
+}
+
+/* Erişilebilir focus ring — tab ile gezinen kullanıcı için görünür olmalı */
+:focus-visible {
+  outline: 2px solid #2563EB;
+  outline-offset: 2px;
+}
