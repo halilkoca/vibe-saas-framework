@@ -19,11 +19,22 @@ export async function verifyTurnstileToken(token: string, remoteIp?: string): Pr
   formData.append("response", token);
   if (remoteIp) formData.append("remoteip", remoteIp);
 
-  const res = await fetch(
-    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-    { method: "POST", body: formData }
-  );
+  let res: Response;
+  try {
+    res = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      { method: "POST", body: formData }
+    );
+  } catch (fetchErr) {
+    console.error("[Turnstile] Network error calling Cloudflare:", fetchErr);
+    return false;
+  }
 
   const data = await res.json();
+
+  if (!data.success) {
+    console.warn("[Turnstile] Verification failed:", JSON.stringify(data));
+  }
+
   return data.success === true;
 }

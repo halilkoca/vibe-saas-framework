@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     },
   },
   async headers() {
+    const isDev = process.env.NODE_ENV !== "production";
     return [
       {
         source: "/(.*)",
@@ -14,11 +15,14 @@ const nextConfig: NextConfig = {
           // Content Security Policy
           // Turnstile needs: script + frame from challenges.cloudflare.com
           // Supabase needs: connect to *.supabase.co, wss for realtime
+          // React dev mode needs unsafe-eval for debugging
           {
             key: "Content-Security-Policy",
             value:
               "default-src 'self'; " +
-              "script-src 'self' https://challenges.cloudflare.com; " +
+              "script-src 'self' 'unsafe-inline'" +
+              (isDev ? " 'unsafe-eval'" : "") +
+              " https://challenges.cloudflare.com; " +
               "frame-src https://challenges.cloudflare.com; " +
               "connect-src 'self' https://*.supabase.co wss://*.supabase.co; " +
               "img-src 'self' data:; " +

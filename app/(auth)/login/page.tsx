@@ -9,6 +9,7 @@ const initialState: LoginState = { error: null };
 
 export default function LoginPage() {
   const [state, formAction, pending] = useActionState(login, initialState);
+  const turnstileResetKey = state?.error ? Date.now() : undefined;
 
   return (
     <div>
@@ -46,7 +47,7 @@ export default function LoginPage() {
           />
         </div>
 
-        <TurnstileWidget />
+        <TurnstileWidget resetKey={turnstileResetKey} />
 
         {state?.error && (
           <p role="alert" className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
