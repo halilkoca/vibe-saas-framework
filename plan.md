@@ -33,15 +33,21 @@
 ## 1. Mimari Özet
 
 ```
-Next.js 15 (App Router, latest) ─┬─ SSG: (marketing)/ (landing, about, contact, pricing, blog)
+Next.js 16 (App Router, latest) ─┬─ SSG: (marketing)/ (landing, about, contact, pricing, blog)
                                    └─ SSR: (app)/ (dashboard, leads, sales, reports)
                                          │
                                          ▼
-                           Supabase (Postgres + Auth + RLS)
+                            API Route (app/api/...)
+                                         │
+                                         ▼
+                            Data Layer (lib/data/...)
+                                         │
+                                         ▼
+                            Supabase (Postgres + Auth + RLS)
                                          │
                      tenant_id kolonu + RLS policy her tabloda
                                          │
-                           Middleware: session refresh + tenant context
+                            proxy.ts: session refresh + app route guard
 ```
 
 **Klasör yapısı:**
@@ -58,19 +64,34 @@ Next.js 15 (App Router, latest) ─┬─ SSG: (marketing)/ (landing, about, con
     /settings
       /team                → kullanıcı davet, rol yönetimi
       /billing              → [MODÜL] Stripe/Helcim entegrasyonu
-  /api
+  /api                   → Route Handlers (Next.js 16)
+    /leads                → GET (list), POST (create)
+    /leads/[id]           → PATCH (update status), DELETE
+    /deals                → GET (list), POST (create)
+    /deals/[id]           → PATCH (update stage)
+    /reports              → GET (lead + deal istatistikleri)
+    /dashboard            → GET (leadCount, openDealCount, recentLeads)
+    /auth
+      /login              → POST (email + password + Turnstile + rate-limit)
+      /signup             → POST (full_name + company_name + email + password + Turnstile + rate-limit)
+    /profile              → GET (current user profile + tenant name)
     /webhooks             → Stripe/Helcim webhook handler'ları
 /components
   /marketing-header.tsx  → Pazarlama sayfaları ortak header
   /marketing-footer.tsx  → Pazarlama sayfaları ortak footer
   /feature-card.tsx      → Özellik kartı bileşeni
 /lib
+  /data                  → Veritabanı katmanı (tüm DB sorguları burada)
+    leads.ts              → getAllLeads, createLead, updateLeadStatus, deleteLead, getLeadsCount, getRecentLeads
+    deals.ts              → getAllDeals, createDeal, updateDealStage, getOpenDealCount
+    reports.ts            → getLeadStatusCounts, getDealStageTotals
+    profiles.ts           → getProfile (profile + tenant name)
   /supabase
     client.ts             → browser client
     server.ts              → server component / route handler client
     middleware.ts           → session refresh helper
   /modules.config.ts     → hangi modüller aktif (tek yerden aç/kapa)
-  /rate-limit.ts         → Upstash veya Supabase tabanlı basit rate limiter
+  /rate-limit.ts         → Upstash veya in-memory basit rate limiter
   /turnstile.ts          → Cloudflare Turnstile server-side verify
 /supabase
   /migrations            → numaralı SQL migration dosyaları (her modül ayrı dosya)
@@ -138,16 +159,55 @@ silersen ne kırılır (varsa)."
 
 ---
 
-## 4. Güvenlik Katmanı (framework'ün asıl satış noktası)
+## 4. API Katmanı (app/api/)
+
+Tüm mutation işlemleri `app/api/` altındaki Route Handlers üzerinden yapılır.
+Server Actions doğrudan `supabase.from()` çağırmaz — bunun yerine `fetch("/api/...")` kullanır.
+
+### API Route Haritası
+
+| Route | Metod | Açıklama | Auth | Rate-Limit | Captcha |
+|---|---|---|---|---|---|
+| `/api/leads` | GET | Lead listesi | RLS | — | — |
+| `/api/leads` | POST | Yeni lead | RLS | — | — |
+| `/api/leads/[id]` | PATCH | Status güncelle | RLS | — | — |
+| `/api/leads/[id]` | DELETE | Lead sil | RLS | — | — |
+| `/api/deals` | GET | Deal listesi | RLS | — | — |
+| `/api/deals` | POST | Yeni deal | RLS | — | — |
+| `/api/deals/[id]` | PATCH | Stage güncelle | RLS | — | — |
+| `/api/reports` | GET | Lead/deal istatistikleri | RLS | — | — |
+| `/api/dashboard` | GET | Dashboard özet | RLS | — | — |
+| `/api/auth/login` | POST | Giriş | — | ✓ (5/dk) | ✓ |
+| `/api/auth/signup` | POST | Kayıt | — | ✓ (3/dk) | ✓ |
+| `/api/profile` | GET | Kullanıcı profili | RLS | — | — |
+
+### Veritabanı Soyutlama (lib/data/)
+
+Doğrudan `supabase.from("vibe_*")` çağrıları `lib/data/` altındaki fonksiyonlarda toplanır:
+
+```
+lib/data/
+  leads.ts    → getAllLeads(), createLead(), updateLeadStatus(), deleteLead(), getLeadsCount(), getRecentLeads()
+  deals.ts    → getAllDeals(), createDeal(), updateDealStage(), getOpenDealCount()
+  reports.ts  → getLeadStatusCounts(), getDealStageTotals()
+  profiles.ts → getProfile()
+```
+
+Server Component'ler bu fonksiyonları doğrudan çağırır (fetch yerine direkt fonksiyon).
+Server Actions ise API route'larını çağırır (fetch ile) — böylece rate-limit ve
+diğer güvenlik kontrolleri API katmanında kalır.
+
+---
+
+## 5. Güvenlik Katmanı (framework'ün asıl satış noktası)
 
 Vibe coder'ın bilmediği ama framework'ün otomatik hallettiği şeyler:
 
 - **Cloudflare Turnstile**: signup/login/contact formlarında zorunlu, server-side `verify`
   edilmeden hiçbir mutation çalışmaz.
-- **Rate limiting**: `/api/*` route'larında IP + kullanıcı bazlı basit rate limit
-  (Upstash Redis ile, ücretsiz tier yeterli; Upstash yoksa in-memory fallback + uyarı).
+- **Rate limiting**: `/api/auth/*` route'larında IP bazlı limit (Upstash Redis veya in-memory).
 - **RLS varsayılan açık**: migration template'i `enable row level security` satırı olmadan
-  tablo oluşturmaya izin vermiyor (linter script ile kontrol edilecek, bkz. bölüm 6).
+  tablo oluşturmaya izin vermiyor (linter script ile kontrol edilecek, bkz. bölüm 7).
 - **Server-side tenant doğrulama**: Client hiçbir zaman `tenant_id`'yi kendisi set edemez;
   her zaman `auth.uid()` üzerinden server'da resolve edilir.
 - **CSRF/Origin kontrolü**: Route handler'larda origin header kontrolü.
@@ -165,18 +225,18 @@ kopyala-yapıştır yapacak ve en azından bir kere okumalı.
 
 ---
 
-## 5. SSR/SSG Stratejisi
+## 6. SSR/SSG Stratejisi
 
 - `(marketing)` route group → SSG/ISR (statik build + revalidate).
 - `(app)` route group → her sayfa `export const dynamic = 'force-dynamic'`, Supabase server
   client ile cookie tabanlı session okunur.
-- Next.js 15 App Router + React Server Components varsayılan; client component'ler sadece
+- Next.js 16 App Router + React Server Components varsayılan; client component'ler sadece
   interaktif parçalarda (`'use client'` minimal kullanım — vibe coder'ın her şeyi client
   yapma alışkanlığını kırmak için `docs/` içinde özellikle anlatılacak).
 
 ---
 
-## 6. Geliştirici Deneyimi (DX) — asıl fark burada olacak
+## 7. Geliştirici Deneyimi (DX) — asıl fark burada olacak
 
 - `npm run setup` → interaktif CLI: Supabase proje URL/key sorar, `.env.local` oluşturur,
   migration'ları çalıştırır, Turnstile key sorar.
@@ -197,22 +257,23 @@ kopyala-yapıştır yapacak ve en azından bir kere okumalı.
 
 ---
 
-## 7. Yol Haritası
+## 8. Yol Haritası
 
-- [ ] **v0.1 — Çekirdek**: Next.js + Supabase auth + tenant trigger + RLS pattern + Turnstile + Tablo prefix (`vibe_`)
-- [ ] **v0.2 — Marketing Sayfaları**: Homepage, About Us, Contact (+ Turnstile + honeypot)
-- [ ] **v0.3 — Leads modülü**: CRUD + RLS + basit UI
-- [ ] **v0.4 — Sales modülü**: pipeline + leads ile ilişki
-- [ ] **v0.5 — Reports modülü**: Recharts ile dashboard grafikleri
-- [ ] **v0.6 — Güvenlik linter (`npm run check`)**
-- [ ] **v0.7 — Billing modülü (opsiyonel, Stripe)**
-- [ ] **v0.8 — Setup CLI (`npm run setup`)**
-- [ ] **v0.9 — Güvenlik Katmanları**: CSP, audit log, security headers, session timeout
-- [ ] **v1.0 — Dokümantasyon (TR/EN), örnek video, GitHub yayını**
+- [x] **v0.1 — Çekirdek**: Next.js + Supabase auth + tenant trigger + RLS pattern + Turnstile + Tablo prefix (`vibe_`)
+- [x] **v0.2 — Marketing Sayfaları**: Homepage, About Us, Contact (+ Turnstile + honeypot)
+- [x] **v0.3 — Leads modülü**: CRUD + RLS + basit UI
+- [x] **v0.4 — Sales modülü**: pipeline + leads ile ilişki
+- [x] **v0.5 — Reports modülü**: Recharts ile dashboard grafikleri
+- [x] **v0.6 — Güvenlik linter (`npm run check`)**
+- [x] **v0.7 — API Katmanı**: app/api/ route'ları + lib/data/ soyutlama + auth endpoint'leri
+- [ ] **v0.8 — Billing modülü (opsiyonel, Stripe)**
+- [ ] **v0.9 — Setup CLI (`npm run setup`)**
+- [ ] **v1.0 — Güvenlik Katmanları**: CSP, audit log, security headers, session timeout
+- [ ] **v1.1 — Dokümantasyon (TR/EN), örnek video, GitHub yayını**
 
 ---
 
-## 8. Açık Kararlar / Notlar
+## 9. Açık Kararlar / Notlar
 
 - Bir kullanıcının birden fazla tenant'a üye olması v1'de desteklenmiyor — basitlik için
   bilinçli tercih. İhtiyaç çıkarsa `memberships` join tablosu ile v2'de eklenir.
@@ -226,7 +287,7 @@ kopyala-yapıştır yapacak ve en azından bir kere okumalı.
 
 ---
 
-## 9. Tablo İsimlendirme ve Prefix Stratejisi
+## 10. Tablo İsimlendirme ve Prefix Stratejisi
 
 Tüm framework tabloları `vibe_` prefix'i ile adlandırılır. Bu kararın sebepleri:
 
@@ -268,7 +329,7 @@ const { data } = await supabase.from("vibe_leads").select("*");
 
 ---
 
-## 10. Pazarlama Sayfaları (UI Sections)
+## 11. Pazarlama Sayfaları (UI Sections)
 
 Framework'ün hazır gelen pazarlama sayfaları — SSG ile build edilir, SEO dostudur.
 
@@ -304,7 +365,7 @@ Framework'ün hazır gelen pazarlama sayfaları — SSG ile build edilir, SEO do
 
 ---
 
-## 11. Eksik Güvenlik Katmanları (v0.9 hedefi)
+## 12. Eksik Güvenlik Katmanları (v1.0 hedefi)
 
 ### CSP (Content Security Policy)
 - `next.config.ts` içinde `Content-Security-Policy` header'ı tanımlanır.
@@ -337,7 +398,7 @@ Framework'ün hazır gelen pazarlama sayfaları — SSG ile build edilir, SEO do
 
 ---
 
-## 12. Eksik DX / DevOps (v1.0 hedefi)
+## 13. Eksik DX / DevOps (v1.0 hedefi)
 
 ### Testing
 - **Vitest**: Unit testler için. `lib/`, `app/(app)/**/actions.ts` testleri.
@@ -394,7 +455,7 @@ jobs:
 
 ---
 
-## 13. Eksik Mimari Detaylar
+## 14. Eksik Mimari Detaylar
 
 ### Form Handling
 - Native HTML form + Server Actions (şimdilik).
